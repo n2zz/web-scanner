@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>가족생명 서류 전송</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="landing-page" class="container">
+      <header class="header">
+        <h1>가족생명<br />가입설계동의서 라이브전송</h1>
+      </header>
+
+      <main class="content">
+        <div class="info-box">
+          <div class="info-row">
+            <span class="label">발행번호</span>
+            <span class="value">123456789</span>
+          </div>
+          <div class="info-row">
+            <span class="label">담당설계사</span>
+            <span class="value">김가족</span>
+          </div>
+          <div class="info-row">
+            <span class="label">사원번호</span>
+            <span class="value">1009139270</span>
+          </div>
+        </div>
+
+        <div class="image-container">
+          <img src="guide.png" alt="촬영 가이드 이미지" class="guide-image" />
+        </div>
+
+        <div class="guide-text">
+          <p>
+            <span class="icon">ⓘ</span> 사진 촬영시 서류를 바르게 펼치고
+            모서리를 가이드라인에 잘 맞춰 촬영하시기 바랍니다.
+          </p>
+          <p>
+            <span class="icon">ⓘ</span> 내용이 흐리거나 잘리지 않도록 선명하게
+            촬영하시기 바랍니다.
+          </p>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <button id="startCaptureBtn" class="btn-full">사진촬영</button>
+      </footer>
+    </div>
+
+    <div id="camera-page" class="camera-container" style="display: none">
+      <video id="video" autoplay playsinline muted></video>
+
+      <div class="camera-guide-box"></div>
+
+      <div class="camera-controls">
+        <button id="shutterBtn" class="shutter-btn"></button>
+        <button id="closeCameraBtn" class="close-btn">취소</button>
+      </div>
+
+      <canvas id="outputCanvas" style="display: none"></canvas>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

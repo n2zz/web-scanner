@@ -1,0 +1,268 @@
+/* 기본 초기화 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Segoe UI",
+    Roboto, sans-serif;
+  background-color: #ffffff; /* 1. 흰색 배경 */
+  color: #333333;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh; /* height 대신 min-height 권장 */
+  padding: 20px;
+
+  /* 중요: 하단 고정 버튼에 가려지지 않도록 여백 추가 */
+  /* 버튼 높이(약 60px) + 여유공간 + Safe Area 고려 */
+  padding-bottom: 100px;
+}
+
+/* 헤더 스타일 */
+.header {
+  margin-top: 40px;
+  margin-bottom: 30px;
+  text-align: left;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #000;
+}
+
+/* 메인 컨텐츠 영역 */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* spacer 제거로 인한 여백 조정 (필요시) */
+  /* justify-content: space-between; */
+}
+
+/* 정보 박스 스타일 */
+.info-box {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px; /* 하단 여백 유지 */
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.label {
+  color: #666;
+  font-weight: 500;
+}
+
+.value {
+  color: #000;
+  font-weight: 600;
+}
+
+/* 이미지 컨테이너 스타일 수정 */
+.image-container {
+  display: flex; /* Flexbox 사용 */
+  justify-content: center; /* 가로 방향 중앙 정렬 */
+  align-items: center; /* 세로 방향 중앙 정렬 */
+  margin-bottom: 20px; /* 하단 여백 */
+  flex: 1; /* 남은 공간을 차지하며 이미지를 수직 중앙에 오게 함 */
+  padding: 20px 0; /* 위아래로 약간의 여백 추가 */
+}
+
+/* 이미지 스타일 수정 */
+.guide-image {
+  max-width: 90%; /* 좌우 여백을 위해 최대 너비를 90%로 설정 */
+  height: auto; /* 비율 유지 */
+  max-height: 350px; /* 너무 커지지 않도록 최대 높이 제한 */
+  object-fit: contain; /* 이미지 비율 유지 */
+
+  /* --- 추가된 효과 --- */
+  border-radius: 16px; /* 둥근 모서리 효과 (값 조절 가능) */
+  border: 1px solid #e9ecef; /* 얇은 회색 테두리 추가 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* 부드러운 그림자로 입체감 추가 */
+}
+
+/* 하단 안내 문구 스타일 */
+.guide-text {
+  margin-bottom: 20px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+  background-color: #fff;
+}
+
+.guide-text p {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.guide-text .icon {
+  margin-right: 6px;
+  color: #4a90e2; /* 아이콘 색상 포인트 */
+  font-weight: bold;
+}
+
+/* 푸터 (하단 고정 영역) 수정 */
+.footer {
+  position: fixed; /* 화면 하단에 고정 */
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  z-index: 1000; /* 다른 요소보다 위에 오도록 */
+
+  background-color: #2c3e50; /* 버튼 색상과 동일하게 배경 지정 */
+
+  /* 아이폰 Safe Area 대응: 홈 바 영역만큼 패딩 추가 */
+  padding-bottom: constant(safe-area-inset-bottom); /* iOS 11.0-11.2 */
+  padding-bottom: env(safe-area-inset-bottom); /* iOS 11.2+ */
+}
+
+/* 버튼 스타일 수정 (꽉 찬 네모 형태) */
+.btn-full {
+  width: 100%;
+  height: 60px; /* 터치하기 좋은 높이 설정 */
+
+  background-color: #2c3e50; /* 배경색 (푸터와 동일) */
+  color: white;
+
+  border: none;
+  border-radius: 0; /* 둥근 모서리 제거 (직각) */
+  margin: 0;
+  padding: 0;
+
+  font-size: 18px; /* 글자 크기 약간 키움 */
+  font-weight: 700;
+  cursor: pointer;
+
+  /* 클릭 시 텍스트 눌림 효과만 살짝 */
+  transition: opacity 0.2s;
+}
+
+.btn-full:active {
+  opacity: 0.8; /* 배경색 대신 투명도로 눌림 효과 */
+}
+/* =========================================
+   카메라 페이지 스타일 (전체 화면 덮어씌기)
+   ========================================= */
+.camera-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+  z-index: 2000; /* 랜딩 페이지보다 위에 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 비디오가 화면에 꽉 차게 (비율 유지하며 잘림 허용) */
+#video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* 화면을 꽉 채움 */
+}
+
+/* 가이드라인 박스 (화면 중앙 네모) */
+.camera-guide-box {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* 정확히 중앙 정렬 */
+  width: 80%; /* 화면 너비의 80% */
+  aspect-ratio: 1 / 1.414; /* A4 용지 비율 (약 1:1.4) */
+
+  border: 2px solid rgba(255, 255, 255, 0.8); /* 흰색 테두리 */
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* 박스 바깥을 어둡게 처리 (집중 효과) */
+  border-radius: 12px;
+  pointer-events: none; /* 터치 통과 */
+}
+
+/* 박스 모서리 강조 (선택사항 - 더 스캐너 같음) */
+.camera-guide-box::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 2px solid #4a90e2; /* 파란색 강조 선 */
+  clip-path: polygon(
+    0% 20px,
+    0% 0%,
+    20px 0%,
+    /* 좌상 */ calc(100% - 20px) 0%,
+    100% 0%,
+    100% 20px,
+    /* 우상 */ 100% calc(100% - 20px),
+    100% 100%,
+    calc(100% - 20px) 100%,
+    /* 우하 */ 20px 100%,
+    0% 100%,
+    0% calc(100% - 20px) /* 좌하 */
+  );
+}
+
+/* 하단 컨트롤 영역 */
+.camera-controls {
+  position: absolute;
+  bottom: 30px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 셔터 버튼 (동그라미) */
+.shutter-btn {
+  width: 72px;
+  height: 72px;
+  background-color: white;
+  border-radius: 50%;
+  border: 4px solid rgba(200, 200, 200, 0.5);
+  cursor: pointer;
+  position: relative;
+}
+
+.shutter-btn:active {
+  background-color: #ddd;
+  transform: scale(0.95);
+}
+
+/* 취소 버튼 */
+.close-btn {
+  position: absolute;
+  right: 30px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
