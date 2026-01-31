@@ -18,12 +18,15 @@ body {
 .container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh; /* height 대신 min-height 권장 */
+  min-height: 100vh;
   padding: 20px;
 
-  /* 중요: 하단 고정 버튼에 가려지지 않도록 여백 추가 */
-  /* 버튼 높이(약 60px) + 여유공간 + Safe Area 고려 */
-  padding-bottom: 100px;
+  /* [수정됨] 하단 고정 버튼(약 60px) + Safe Area + 여유분 확보 */
+  /* 버튼 뒤에 내용이 가려지지 않도록 충분히 띄웁니다 */
+  padding-bottom: 140px;
+
+  /* (옵션) 아이폰 노치/홈바 영역까지 계산해서 더 완벽하게 띄우기 */
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
 /* 헤더 스타일 */
