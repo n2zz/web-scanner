@@ -1,16 +1,15 @@
 <!DOCTYPE html>
 <html lang="ko">
   <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
-
     <meta name="format-detection" content="telephone=no" />
-
     <title>가족생명 서류 전송</title>
     <link rel="stylesheet" href="style.css" />
+
+    <script
+      async
+      src="https://docs.opencv.org/4.8.0/opencv.js"
+      onload="onOpenCvReady();"
+    ></script>
   </head>
   <body>
     <div id="landing-page" class="container">
@@ -67,6 +66,26 @@
 
       <canvas id="outputCanvas" style="display: none"></canvas>
     </div>
+
+    <div id="result-page" class="result-container" style="display: none">
+      <header class="header text-center">
+        <h1>스캔 결과 확인</h1>
+      </header>
+
+      <main class="content">
+        <div class="scanned-image-wrapper">
+          <img id="scannedImage" alt="스캔된 문서" />
+        </div>
+        <p class="result-guide">글자가 선명하게 잘 보이는지 확인해주세요.</p>
+      </main>
+
+      <footer class="footer-dual">
+        <button id="retakeBtn" class="btn-half btn-secondary">다시 찍기</button>
+        <button id="uploadBtn" class="btn-half btn-primary">서버로 전송</button>
+      </footer>
+    </div>
+
+    <canvas id="outputCanvas" style="display: none"></canvas>
 
     <script src="app.js"></script>
   </body>
