@@ -8,25 +8,25 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Segoe UI",
     Roboto, sans-serif;
-  background-color: #ffffff; /* 1. 흰색 배경 */
+  font-size: 16px;
+  background-color: #ffffff;
   color: #333333;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+
+  /* height: 100vh; (이게 있다면 지워주세요!) */
+  min-height: 100vh; /* 화면 크기 최소치만 보장 */
+  overflow-x: hidden; /* 가로 스크롤만 방지하고, 세로 스크롤은 허용 */
 }
 
+/* 2. 컨테이너 하단 여백 대폭 추가 */
 .container {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   padding: 20px;
 
-  /* [수정됨] 하단 고정 버튼(약 60px) + Safe Area + 여유분 확보 */
-  /* 버튼 뒤에 내용이 가려지지 않도록 충분히 띄웁니다 */
+  /* 하단 버튼 높이(60px) + 넉넉한 여백 + 아이폰 홈바 영역 */
+  /* 숫자를 120px ~ 150px 사이로 조절해 보세요 */
   padding-bottom: 140px;
-
-  /* (옵션) 아이폰 노치/홈바 영역까지 계산해서 더 완벽하게 띄우기 */
-  padding-bottom: calc(100px + env(safe-area-inset-bottom));
 }
 
 /* 헤더 스타일 */
@@ -94,15 +94,14 @@ body {
 
 /* 이미지 스타일 수정 */
 .guide-image {
-  max-width: 90%; /* 좌우 여백을 위해 최대 너비를 90%로 설정 */
-  height: auto; /* 비율 유지 */
-  max-height: 350px; /* 너무 커지지 않도록 최대 높이 제한 */
-  object-fit: contain; /* 이미지 비율 유지 */
+  max-width: 90%;
+  height: auto;
+  max-height: 245px; /* 👈 기존 350px에서 약 70% 크기로 축소 */
+  object-fit: contain;
 
-  /* --- 추가된 효과 --- */
-  border-radius: 16px; /* 둥근 모서리 효과 (값 조절 가능) */
-  border: 1px solid #e9ecef; /* 얇은 회색 테두리 추가 */
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* 부드러운 그림자로 입체감 추가 */
+  border-radius: 16px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 /* 하단 안내 문구 스타일 */
