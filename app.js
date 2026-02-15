@@ -85,10 +85,7 @@ function takePhoto() {
   let hierarchy = new cv.Mat();
 
   try {
-    // [1단계] 흑백 변환 및 이진화 (검은색 마커를 찾기 위해)
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-    // 빛 반사 등을 고려한 적응형 이진화 적용 후 색상 반전 (검은색 -> 흰색 덩어리로 만듦)
     cv.adaptiveThreshold(
       gray,
       thresh,
@@ -99,7 +96,6 @@ function takePhoto() {
       15
     );
 
-    // [2단계] 윤곽선 찾기
     cv.findContours(
       thresh,
       contours,
@@ -110,11 +106,9 @@ function takePhoto() {
 
     let candidates = [];
 
-    // 화면 전체 크기 대비 마커의 예상 크기 범위 (환경에 따라 튜닝 가능)
-    const minArea = vWidth * vHeight * 0.0001; // 너무 작은 노이즈 제거
-    const maxArea = vWidth * vHeight * 0.05; // 너무 큰 영역 제거
+    const minArea = vWidth * vHeight * 0.0001;
+    const maxArea = vWidth * vHeight * 0.05;
 
-    // [3단계] 검은색 정사각형 후보군 걸러내기
     for (let i = 0; i < contours.size(); ++i) {
       let cnt = contours.get(i);
       let area = cv.contourArea(cnt);
@@ -124,9 +118,7 @@ function takePhoto() {
         let aspectRatio = rect.width / rect.height;
         let extent = area / (rect.width * rect.height);
 
-        // 조건: 가로세로 비율이 1에 가깝고(정사각형), 내부가 꽉 차있어야 함(extent > 0.7)
         if (aspectRatio >= 0.5 && aspectRatio <= 1.8 && extent >= 0.7) {
-          // 정사각형의 중심점 계산
           let cx = rect.x + rect.width / 2;
           let cy = rect.y + rect.height / 2;
           candidates.push({ x: cx, y: cy });
@@ -134,28 +126,29 @@ function takePhoto() {
       }
     }
 
-    // [4단계] 찾은 정사각형 중 가장 바깥쪽의 4개 점(네 귀퉁이) 추출
+    // ★ 수정된 부분: 마커를 찾지 못했을 때 얼럿 후 비디오 다시 재생 ★
     if (candidates.length < 4) {
       alert(
         "용지의 네 귀퉁이 마커(■)를 찾을 수 없습니다.\n마커가 화면에 모두 들어오도록 잘 맞춰주세요."
       );
-      return; // 카메라 화면 유지
+
+      // 경고창 때문에 멈춘 카메라 화면을 다시 강제 재생
+      if (video.paused) {
+        video.play();
+      }
+      return;
     }
 
-    // 좌표들을 이용해 좌상, 우하, 우상, 좌하 마커 찾기
-    // x+y가 가장 작은 것이 좌상단, 가장 큰 것이 우하단
     candidates.sort((a, b) => a.x + a.y - (b.x + b.y));
     let tl = candidates[0];
     let br = candidates[candidates.length - 1];
 
-    // x-y가 가장 큰 것이 우상단, 가장 작은 것이 좌하단
     candidates.sort((a, b) => a.x - a.y - (b.x - b.y));
     let bl = candidates[0];
     let tr = candidates[candidates.length - 1];
 
-    // [5단계] 시점 변환 (4개의 마커 중심점을 기준으로 평탄화)
     let dst = new cv.Mat();
-    let dsize = new cv.Size(1728, 2200); // 목표 해상도
+    let dsize = new cv.Size(1728, 2200);
 
     let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
       tl.x,
@@ -189,7 +182,6 @@ function takePhoto() {
       new cv.Scalar()
     );
 
-    // [6단계] 팩스 효과 (글자를 더 선명하게)
     cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
     cv.adaptiveThreshold(
       dst,
@@ -201,11 +193,9 @@ function takePhoto() {
       15
     );
 
-    // 결과 출력
     cv.imshow(canvas, dst);
     scannedImage.src = canvas.toDataURL("image/jpeg", 0.9);
 
-    // 카메라 정지 및 화면 전환
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
@@ -213,7 +203,6 @@ function takePhoto() {
     cameraPage.style.display = "none";
     resultPage.style.display = "flex";
 
-    // 메모리 해제
     dst.delete();
     srcTri.delete();
     dstTri.delete();
@@ -221,6 +210,11 @@ function takePhoto() {
   } catch (err) {
     console.error("이미지 처리 오류:", err);
     alert("이미지 처리 중 오류가 발생했습니다. 다시 촬영해주세요.");
+
+    // ★ 수정된 부분: 에러 얼럿 후에도 비디오 다시 재생 ★
+    if (video.paused) {
+      video.play();
+    }
   } finally {
     src.delete();
     gray.delete();
