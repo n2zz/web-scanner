@@ -212,7 +212,7 @@ body {
 
 /* 탐색 중 텍스트 */
 .camera-guide-box::before {
-  content: "마커(■) 탐색 중...";
+  content: "문서 테두리 탐색 중..."; /* 👈 수정됨 */
   color: white;
   font-size: 16px;
   background: rgba(0, 0, 0, 0.5);
@@ -220,11 +220,12 @@ body {
   border-radius: 20px;
 }
 
-/* ★ 마커를 찾았을 때 (JS에서 클래스 추가됨) ★ */
-.camera-guide-box.detected {
-  border: 4px solid #00ff00; /* 초록색 실선 */
-  background-color: rgba(0, 255, 0, 0.1); /* 초록색 틴트 */
-  box-shadow: 0 0 20px rgba(0, 255, 0, 0.5), 0 0 0 9999px rgba(0, 0, 0, 0.6);
+/* 마커를 찾았을 때 -> 문서를 찾았을 때 */
+.camera-guide-box.detected::before {
+  content: "가만히 계세요! (자동 촬영)";
+  color: #00ff00;
+  font-weight: bold;
+  background: rgba(0, 0, 0, 0.8);
 }
 
 .camera-guide-box.detected::before {

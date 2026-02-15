@@ -16,12 +16,11 @@ const closeCameraBtn = document.getElementById("closeCameraBtn");
 const retakeBtn = document.getElementById("retakeBtn");
 const saveBtn = document.getElementById("saveBtn");
 
-// 상태 제어 변수
 let stream = null;
 let detectReq = null;
 let isCapturing = false;
 let stableCount = 0;
-let lastGoodCoords = null; // 가장 최근에 찾은 마커 좌표
+let lastGoodCoords = null;
 
 // ==========================================
 // 2. 카메라 제어
@@ -51,10 +50,11 @@ async function startCamera() {
     video.setAttribute("playsinline", true);
     video.play();
 
-    // 비디오 재생이 시작되면 실시간 마커 탐색 루프 실행
     isCapturing = false;
     stableCount = 0;
-    detectReq = requestAnimationFrame(scanMarkersLoop);
+
+    // 카메라가 켜지면 문서 탐색 루프 시작
+    detectReq = requestAnimationFrame(scanDocumentLoop);
   } catch (err) {
     alert("카메라 권한을 허용해주세요.");
     closeCamera();
@@ -76,16 +76,16 @@ function closeCamera() {
 }
 
 // ==========================================
-// 3. 실시간 마커 탐색 루프 (유예 시간 버퍼 적용)
+// 3. 실시간 문서 테두리 탐색 루프 (Edge Detection)
 // ==========================================
-function scanMarkersLoop() {
+function scanDocumentLoop() {
   if (!stream || isCapturing) return;
 
   const vW = video.videoWidth;
   const vH = video.videoHeight;
 
   if (vW === 0) {
-    detectReq = requestAnimationFrame(scanMarkersLoop);
+    detectReq = requestAnimationFrame(scanDocumentLoop);
     return;
   }
 
@@ -105,75 +105,78 @@ function scanMarkersLoop() {
 
   let src = cv.imread(window.detectCanvas);
   let gray = new cv.Mat();
-  let thresh = new cv.Mat();
+  let blurred = new cv.Mat();
+  let edges = new cv.Mat();
   let contours = new cv.MatVector();
   let hierarchy = new cv.Mat();
 
-  let foundMarkersThisFrame = false; // 이번 프레임에서 마커를 찾았는지 여부
+  let foundDocThisFrame = false;
 
   try {
+    // [1단계] 전처리 (흑백 -> 가우시안 블러 -> 외곽선 추출)
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-    cv.GaussianBlur(gray, gray, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
-    cv.adaptiveThreshold(
-      gray,
-      thresh,
-      255,
-      cv.ADAPTIVE_THRESH_MEAN_C,
-      cv.THRESH_BINARY_INV,
-      41,
-      10
-    );
+    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+    cv.Canny(blurred, edges, 75, 200); // 캐니 엣지 검출기 적용 (선만 따냄)
+
+    // [2단계] 윤곽선 찾기
     cv.findContours(
-      thresh,
+      edges,
       contours,
       hierarchy,
       cv.RETR_LIST,
       cv.CHAIN_APPROX_SIMPLE
     );
 
-    let candidates = [];
-    const minArea = dW * dH * 0.0001;
-    const maxArea = dW * dH * 0.015; // QR코드는 무시하되, 마커 허용 범위를 살짝 넓힘 (1.5%)
+    let maxArea = 0;
+    let bestPoints = null;
 
+    // [3단계] 가장 큰 사각형(문서) 찾기
     for (let i = 0; i < contours.size(); ++i) {
       let cnt = contours.get(i);
       let area = cv.contourArea(cnt);
 
-      if (area > minArea && area < maxArea) {
-        let rect = cv.boundingRect(cnt);
-        let aspect = rect.width / rect.height;
-        let extent = area / (rect.width * rect.height);
+      // 화면의 최소 15% 이상을 차지하는 거대한 형태만 검사 (자잘한 노이즈 무시)
+      if (area > dW * dH * 0.15) {
+        let approx = new cv.Mat();
+        let peri = cv.arcLength(cnt, true);
 
-        // 속이 꽉 찬(55% 이상) 정사각형에 가까운 덩어리
-        if (aspect >= 0.5 && aspect <= 2.0 && extent >= 0.55) {
-          candidates.push({
-            x: rect.x + rect.width / 2,
-            y: rect.y + rect.height / 2,
-          });
+        // 선들을 부드럽게 이어서 다각형으로 근사화 (오차범위 2%)
+        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+
+        // 꼭짓점이 4개이고, 지금까지 찾은 것 중 가장 크다면 '문서'로 인정
+        if (approx.rows === 4 && area > maxArea) {
+          maxArea = area;
+          bestPoints = [];
+          for (let j = 0; j < 4; j++) {
+            bestPoints.push({
+              x: approx.data32S[j * 2],
+              y: approx.data32S[j * 2 + 1],
+            });
+          }
         }
+        approx.delete();
       }
     }
 
-    // 4개 이상의 점을 찾았을 때
-    if (candidates.length >= 4) {
-      candidates.sort((a, b) => a.x + a.y - (b.x + b.y));
-      let tl = candidates[0];
-      let br = candidates[candidates.length - 1];
+    // [4단계] 문서를 찾았다면 4개의 꼭짓점 좌표 정렬
+    if (bestPoints && bestPoints.length === 4) {
+      bestPoints.sort((a, b) => a.x + a.y - (b.x + b.y));
+      let tl = bestPoints[0];
+      let br = bestPoints[3];
 
-      candidates.sort((a, b) => a.x - a.y - (b.x - b.y));
-      let bl = candidates[0];
-      let tr = candidates[candidates.length - 1];
+      bestPoints.sort((a, b) => a.x - a.y - (b.x - b.y));
+      let bl = bestPoints[0];
+      let tr = bestPoints[3];
 
-      // 네 점의 거리가 충분히 떨어져 있는지 확인 (화면 노이즈 뭉침 방지)
-      if (tr.x - tl.x > dW * 0.3) {
-        foundMarkersThisFrame = true;
-        lastGoodCoords = {
-          tl: { x: tl.x / scale, y: tl.y / scale },
-          tr: { x: tr.x / scale, y: tr.y / scale },
-          br: { x: br.x / scale, y: br.y / scale },
-          bl: { x: bl.x / scale, y: bl.y / scale },
-        };
-      }
+      foundDocThisFrame = true;
+
+      // 화면 스케일에 맞게 좌표 복원
+      lastGoodCoords = {
+        tl: { x: tl.x / scale, y: tl.y / scale },
+        tr: { x: tr.x / scale, y: tr.y / scale },
+        br: { x: br.x / scale, y: br.y / scale },
+        bl: { x: bl.x / scale, y: bl.y / scale },
+      };
     }
 
     // ==========================================
@@ -181,23 +184,22 @@ function scanMarkersLoop() {
     // ==========================================
     if (typeof window.missedCount === "undefined") window.missedCount = 0;
 
-    if (foundMarkersThisFrame) {
+    if (foundDocThisFrame) {
       stableCount++; // 성공 카운트 증가
       window.missedCount = 0; // 실패 카운트 초기화
-      guideBox.classList.add("detected");
+      guideBox.classList.add("detected"); // 초록색 알림 켬
 
-      // 약 15프레임(0.4~0.5초) 동안 찰나의 끊김 없이 유지되면 촬영!
+      // 약 15프레임(0.4~0.5초) 동안 유지되면 자동 촬영 발동!
       if (stableCount >= 15) {
         isCapturing = true;
         executeHighResCapture(lastGoodCoords);
         return; // 루프 완전 종료
       }
     } else {
-      // 이번 프레임에서 마커를 놓쳤을 때
+      // 이번 프레임에서 문서를 놓쳤을 때
       window.missedCount++;
 
-      // 5프레임(약 0.15초) 연속으로 놓쳤을 때만 완전 초기화!
-      // (1~2프레임 놓친 건 봐줌)
+      // 5프레임(약 0.15초) 연속으로 놓쳤을 때만 완전 초기화
       if (window.missedCount > 5) {
         stableCount = 0;
         guideBox.classList.remove("detected");
@@ -208,22 +210,17 @@ function scanMarkersLoop() {
   } finally {
     src.delete();
     gray.delete();
-    thresh.delete();
+    blurred.delete();
+    edges.delete();
     contours.delete();
     hierarchy.delete();
   }
 
-  if (!isCapturing) detectReq = requestAnimationFrame(scanMarkersLoop);
-}
-
-function resetDetection() {
-  stableCount = 0;
-  lastGoodCoords = null;
-  guideBox.classList.remove("detected");
+  if (!isCapturing) detectReq = requestAnimationFrame(scanDocumentLoop);
 }
 
 // ==========================================
-// 4. 고해상도 이미지 처리 (마커 기반)
+// 4. 고해상도 이미지 평탄화 (Perspective Transform)
 // ==========================================
 function executeHighResCapture(coords) {
   guideBox.classList.remove("detected");
@@ -238,7 +235,7 @@ function executeHighResCapture(coords) {
 
   let src = cv.imread(canvas);
   let dst = new cv.Mat();
-  let dsize = new cv.Size(1728, 2200);
+  let dsize = new cv.Size(1728, 2200); // 최종 해상도
 
   try {
     let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
@@ -262,6 +259,7 @@ function executeHighResCapture(coords) {
       dsize.height,
     ]);
 
+    // 투영 변환 (사다리꼴 -> 직사각형 펴기)
     let M = cv.getPerspectiveTransform(srcTri, dstTri);
     cv.warpPerspective(
       src,
@@ -273,6 +271,7 @@ function executeHighResCapture(coords) {
       new cv.Scalar()
     );
 
+    // 흑백 및 선명도(팩스) 처리
     cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
     cv.adaptiveThreshold(
       dst,
@@ -307,19 +306,19 @@ function executeHighResCapture(coords) {
 }
 
 // ==========================================
-// 5. 수동 촬영 (수동 버튼 클릭 시 / 마커 못 찾았을 때 대비용)
+// 5. 수동 촬영 버튼 로직 (Fallback)
 // ==========================================
 function manualFallbackCapture() {
   if (isCapturing) return;
-  isCapturing = true; // 루프 정지
+  isCapturing = true;
 
-  // 만약 초록불이 뜬 상태에서 성급하게 버튼을 눌렀다면 자동 촬영 로직 강제 실행
-  if (lastGoodCoords) {
+  // 초록불이 들어왔을 때 성급하게 누르면, 잡혀있는 문서 좌표로 바로 촬영
+  if (lastGoodCoords && guideBox.classList.contains("detected")) {
     executeHighResCapture(lastGoodCoords);
     return;
   }
 
-  // 마커를 아예 못 찾았는데 버튼을 누른 경우 -> 화면 중앙 가이드 박스 영역만 잘라냄
+  // 아예 문서를 못 찾고 있는데 촬영 버튼을 누른 경우 -> 화면 중앙만 네모낳게 자르기
   const vW = video.videoWidth;
   const vH = video.videoHeight;
   canvas.width = vW;
@@ -327,7 +326,6 @@ function manualFallbackCapture() {
   const ctx = canvas.getContext("2d");
   ctx.drawImage(video, 0, 0, vW, vH);
 
-  // CSS object-fit: cover 역계산
   const videoRatio = vW / vH;
   const screenRatio = video.clientWidth / video.clientHeight;
   const guideRect = guideBox.getBoundingClientRect();
@@ -354,7 +352,6 @@ function manualFallbackCapture() {
   let dsize = new cv.Size(1728, 2200);
 
   try {
-    // 화면에 보이는 중앙 박스를 기준으로 펴기
     let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
       rx,
       ry,
@@ -419,7 +416,7 @@ function manualFallbackCapture() {
 }
 
 // ==========================================
-// 6. 결과 화면 동작
+// 6. 결과 화면 동작 (다시찍기/저장)
 // ==========================================
 function retakePhoto() {
   resultPage.style.display = "none";
