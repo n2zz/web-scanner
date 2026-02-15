@@ -18,16 +18,6 @@ const saveBtn = document.getElementById("saveBtn");
 
 // 상태 변수
 let stream = null;
-let isOpenCvReady = false;
-
-// ==========================================
-// 2. OpenCV 초기화 콜백 (HTML에서 호출됨)
-// ==========================================
-// 전역 변수로 선언하여 HTML의 onload에서 무조건 찾을 수 있게 보장합니다.
-window.onOpenCvReady = function () {
-  isOpenCvReady = true;
-  console.log("OpenCV.js 로드 완료!");
-};
 
 // ==========================================
 // 3. 카메라 제어 함수
