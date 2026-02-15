@@ -76,7 +76,7 @@ function closeCamera() {
 }
 
 // ==========================================
-// 3. 실시간 마커 탐색 루프 (QR코드 필터링 및 대기시간 증가)
+// 3. 실시간 마커 탐색 루프 (유예 시간 버퍼 적용)
 // ==========================================
 function scanMarkersLoop() {
   if (!stream || isCapturing) return;
@@ -109,18 +109,18 @@ function scanMarkersLoop() {
   let contours = new cv.MatVector();
   let hierarchy = new cv.Mat();
 
+  let foundMarkersThisFrame = false; // 이번 프레임에서 마커를 찾았는지 여부
+
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
     cv.GaussianBlur(gray, gray, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
-
-    // 블록 사이즈를 살짝 줄여서 내부 틈새(QR코드)를 더 확실히 분리
     cv.adaptiveThreshold(
       gray,
       thresh,
       255,
       cv.ADAPTIVE_THRESH_MEAN_C,
       cv.THRESH_BINARY_INV,
-      31,
+      41,
       10
     );
     cv.findContours(
@@ -132,11 +132,8 @@ function scanMarkersLoop() {
     );
 
     let candidates = [];
-
-    // 🔧 [핵심 수정 1] 최대 크기(maxArea) 대폭 감소
-    // QR코드는 마커보다 훨씬 크므로, 화면의 0.8% 이상을 차지하는 거대한 덩어리(QR코드)는 아예 검사 대상에서 제외합니다.
-    const minArea = dW * dH * 0.0001; // 최소 크기 (유지)
-    const maxArea = dW * dH * 0.008; // 기존 0.05에서 0.008로 대폭 줄임!
+    const minArea = dW * dH * 0.0001;
+    const maxArea = dW * dH * 0.015; // QR코드는 무시하되, 마커 허용 범위를 살짝 넓힘 (1.5%)
 
     for (let i = 0; i < contours.size(); ++i) {
       let cnt = contours.get(i);
@@ -147,10 +144,8 @@ function scanMarkersLoop() {
         let aspect = rect.width / rect.height;
         let extent = area / (rect.width * rect.height);
 
-        // 🔧 [핵심 수정 2] 밀도(extent) 검사 강화
-        // QR코드는 내부에 틈이 많아 extent 값이 낮게 나옵니다.
-        // 0.65 이상(속이 까맣게 꽉 찬 사각형)만 통과시킵니다.
-        if (aspect >= 0.5 && aspect <= 2.0 && extent >= 0.65) {
+        // 속이 꽉 찬(55% 이상) 정사각형에 가까운 덩어리
+        if (aspect >= 0.5 && aspect <= 2.0 && extent >= 0.55) {
           candidates.push({
             x: rect.x + rect.width / 2,
             y: rect.y + rect.height / 2,
@@ -159,6 +154,7 @@ function scanMarkersLoop() {
       }
     }
 
+    // 4개 이상의 점을 찾았을 때
     if (candidates.length >= 4) {
       candidates.sort((a, b) => a.x + a.y - (b.x + b.y));
       let tl = candidates[0];
@@ -168,29 +164,44 @@ function scanMarkersLoop() {
       let bl = candidates[0];
       let tr = candidates[candidates.length - 1];
 
+      // 네 점의 거리가 충분히 떨어져 있는지 확인 (화면 노이즈 뭉침 방지)
       if (tr.x - tl.x > dW * 0.3) {
-        stableCount++;
-        guideBox.classList.add("detected");
-
+        foundMarkersThisFrame = true;
         lastGoodCoords = {
           tl: { x: tl.x / scale, y: tl.y / scale },
           tr: { x: tr.x / scale, y: tr.y / scale },
           br: { x: br.x / scale, y: br.y / scale },
           bl: { x: bl.x / scale, y: bl.y / scale },
         };
+      }
+    }
 
-        // 🔧 [핵심 수정 3] 대기 시간 증가
-        // stableCount 요구치를 10에서 20으로 늘렸습니다. (기기 성능에 따라 다르지만 약 0.5초 ~ 0.7초 정도 소요됨)
-        if (stableCount > 20) {
-          isCapturing = true;
-          executeHighResCapture(lastGoodCoords);
-          return;
-        }
-      } else {
-        resetDetection();
+    // ==========================================
+    // ★ 흔들림 방지(디바운싱) 및 자동 촬영 로직 ★
+    // ==========================================
+    if (typeof window.missedCount === "undefined") window.missedCount = 0;
+
+    if (foundMarkersThisFrame) {
+      stableCount++; // 성공 카운트 증가
+      window.missedCount = 0; // 실패 카운트 초기화
+      guideBox.classList.add("detected");
+
+      // 약 15프레임(0.4~0.5초) 동안 찰나의 끊김 없이 유지되면 촬영!
+      if (stableCount >= 15) {
+        isCapturing = true;
+        executeHighResCapture(lastGoodCoords);
+        return; // 루프 완전 종료
       }
     } else {
-      resetDetection();
+      // 이번 프레임에서 마커를 놓쳤을 때
+      window.missedCount++;
+
+      // 5프레임(약 0.15초) 연속으로 놓쳤을 때만 완전 초기화!
+      // (1~2프레임 놓친 건 봐줌)
+      if (window.missedCount > 5) {
+        stableCount = 0;
+        guideBox.classList.remove("detected");
+      }
     }
   } catch (err) {
     console.error("탐색 에러:", err);
