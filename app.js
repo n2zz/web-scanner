@@ -116,7 +116,7 @@ function scanDocumentLoop() {
     // [1단계] 전처리 (흑백 -> 가우시안 블러 -> 외곽선 추출)
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
     cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-    cv.Canny(blurred, edges, 30, 100); // 캐니 엣지 검출기 적용 (선만 따냄)
+    cv.Canny(blurred, edges, 15, 50); // 캐니 엣지 검출기 적용 (선만 따냄)
 
     // [2단계] 윤곽선 찾기
     cv.findContours(
@@ -141,7 +141,7 @@ function scanDocumentLoop() {
         let peri = cv.arcLength(cnt, true);
 
         // 선들을 부드럽게 이어서 다각형으로 근사화 (오차범위 2%)
-        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+        cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
 
         // 꼭짓점이 4개이고, 지금까지 찾은 것 중 가장 크다면 '문서'로 인정
         if (approx.rows === 4 && area > maxArea) {
@@ -279,8 +279,8 @@ function executeHighResCapture(coords) {
       255,
       cv.ADAPTIVE_THRESH_GAUSSIAN_C,
       cv.THRESH_BINARY,
-      41,
-      7
+      51,
+      5
     );
 
     cv.imshow(canvas, dst);
@@ -390,8 +390,8 @@ function manualFallbackCapture() {
       255,
       cv.ADAPTIVE_THRESH_GAUSSIAN_C,
       cv.THRESH_BINARY,
-      41,
-      7
+      51,
+      5
     );
 
     cv.imshow(canvas, dst);
