@@ -192,7 +192,7 @@ body {
 }
 
 /* =========================================
-   카메라 가이드 박스 (자동 인식 UI 적용)
+   카메라 가이드 박스 (버튼 활성화 방식 적용)
    ========================================= */
 .camera-guide-box {
   position: absolute;
@@ -201,7 +201,7 @@ body {
   transform: translate(-50%, -50%);
   width: 80%;
   aspect-ratio: 1 / 1.414;
-  border: 2px dashed rgba(255, 255, 255, 0.6); /* 기본은 흰색 점선 */
+  border: 2px dashed rgba(255, 255, 255, 0.6);
   border-radius: 12px;
   pointer-events: none;
   transition: all 0.2s ease;
@@ -210,54 +210,36 @@ body {
   align-items: center;
 }
 
-/* 탐색 중 텍스트 */
+/* 1. 기본 대기 상태 (카메라 켜진 직후) */
 .camera-guide-box::before {
-  content: "문서 테두리 탐색 중..."; /* 👈 수정됨 */
+  content: "서류를 맞추고 촬영 버튼을 누르세요";
   color: white;
   font-size: 16px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
   padding: 8px 16px;
   border-radius: 20px;
 }
 
-/* 마커를 찾았을 때 -> 문서를 찾았을 때 */
+/* 2. 탐색 시작 상태 (버튼 누른 직후) */
+.camera-guide-box.scanning {
+  border: 2px solid #f1c40f; /* 노란색 테두리 */
+}
+.camera-guide-box.scanning::before {
+  content: "문서 테두리 탐색 중...";
+  color: #f1c40f;
+}
+
+/* 3. 문서를 찾았을 때 (자동 촬영 직전) */
+.camera-guide-box.detected {
+  border: 4px solid #00ff00; /* 초록색 테두리 */
+  background-color: rgba(0, 255, 0, 0.1);
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.5), 0 0 0 9999px rgba(0, 0, 0, 0.6);
+}
 .camera-guide-box.detected::before {
   content: "가만히 계세요! (자동 촬영)";
   color: #00ff00;
   font-weight: bold;
   background: rgba(0, 0, 0, 0.8);
-}
-
-.camera-guide-box.detected::before {
-  content: "가만히 계세요! (자동 촬영)";
-  color: #00ff00;
-  font-weight: bold;
-  background: rgba(0, 0, 0, 0.8);
-}
-
-/* 박스 모서리 강조 (선택사항 - 더 스캐너 같음) */
-.camera-guide-box::after {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 2px solid #4a90e2; /* 파란색 강조 선 */
-  clip-path: polygon(
-    0% 20px,
-    0% 0%,
-    20px 0%,
-    /* 좌상 */ calc(100% - 20px) 0%,
-    100% 0%,
-    100% 20px,
-    /* 우상 */ 100% calc(100% - 20px),
-    100% 100%,
-    calc(100% - 20px) 100%,
-    /* 우하 */ 20px 100%,
-    0% 100%,
-    0% calc(100% - 20px) /* 좌하 */
-  );
 }
 
 /* 하단 컨트롤 영역 */

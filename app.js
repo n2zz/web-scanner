@@ -19,11 +19,12 @@ const saveBtn = document.getElementById("saveBtn");
 let stream = null;
 let detectReq = null;
 let isCapturing = false;
+let isScanningActive = false; // ★ 탐색 엔진 가동 여부
 let stableCount = 0;
 let lastGoodCoords = null;
 
 // ==========================================
-// 2. 카메라 제어
+// 2. 카메라 제어 (엔진은 대기 상태)
 // ==========================================
 async function startCamera() {
   if (!window.isOpenCvReady) {
@@ -50,11 +51,13 @@ async function startCamera() {
     video.setAttribute("playsinline", true);
     video.play();
 
+    // 초기화
     isCapturing = false;
+    isScanningActive = false;
     stableCount = 0;
+    guideBox.className = "camera-guide-box"; // 모든 CSS 클래스 초기화
 
-    // 카메라가 켜지면 문서 탐색 루프 시작
-    detectReq = requestAnimationFrame(scanDocumentLoop);
+    // ★ 여기서 바로 탐색을 시작하지 않고 화면만 띄워둡니다.
   } catch (err) {
     alert("카메라 권한을 허용해주세요.");
     closeCamera();
@@ -64,6 +67,7 @@ async function startCamera() {
 function closeCamera() {
   if (detectReq) cancelAnimationFrame(detectReq);
   isCapturing = true;
+  isScanningActive = false;
 
   if (stream) {
     stream.getTracks().forEach((track) => track.stop());
@@ -72,14 +76,35 @@ function closeCamera() {
   video.srcObject = null;
   cameraPage.style.display = "none";
   landingPage.style.display = "block";
-  guideBox.classList.remove("detected");
+  guideBox.className = "camera-guide-box";
 }
 
 // ==========================================
-// 3. 실시간 문서 테두리 탐색 루프 (Edge Detection)
+// 3. 셔터 버튼 클릭 제어 (핵심 변경점)
+// ==========================================
+function onShutterBtnClick() {
+  if (isCapturing) return;
+
+  if (!isScanningActive) {
+    // [1] 대기 상태에서 처음 눌렀을 때 -> 자동 탐색 시작
+    isScanningActive = true;
+    stableCount = 0;
+    window.missedCount = 0;
+
+    guideBox.classList.add("scanning"); // '탐색 중...' UI로 변경
+    detectReq = requestAnimationFrame(scanDocumentLoop); // 엔진 가동!
+  } else {
+    // [2] 이미 탐색 중인데 답답해서 한 번 더 눌렀을 때 -> 강제 수동 캡처
+    if (detectReq) cancelAnimationFrame(detectReq);
+    manualFallbackCapture();
+  }
+}
+
+// ==========================================
+// 4. 실시간 문서 테두리 탐색 루프
 // ==========================================
 function scanDocumentLoop() {
-  if (!stream || isCapturing) return;
+  if (!stream || isCapturing || !isScanningActive) return;
 
   const vW = video.videoWidth;
   const vH = video.videoHeight;
@@ -113,12 +138,12 @@ function scanDocumentLoop() {
   let foundDocThisFrame = false;
 
   try {
-    // [1단계] 전처리 (흑백 -> 가우시안 블러 -> 외곽선 추출)
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
     cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-    cv.Canny(blurred, edges, 15, 50); // 캐니 엣지 검출기 적용 (선만 따냄)
 
-    // [2단계] 윤곽선 찾기
+    // ★ 사용자 튜닝 값 적용 (10, 40)
+    cv.Canny(blurred, edges, 10, 40);
+
     cv.findContours(
       edges,
       contours,
@@ -130,20 +155,17 @@ function scanDocumentLoop() {
     let maxArea = 0;
     let bestPoints = null;
 
-    // [3단계] 가장 큰 사각형(문서) 찾기
     for (let i = 0; i < contours.size(); ++i) {
       let cnt = contours.get(i);
       let area = cv.contourArea(cnt);
 
-      // 화면의 최소 15% 이상을 차지하는 거대한 형태만 검사 (자잘한 노이즈 무시)
       if (area > dW * dH * 0.15) {
         let approx = new cv.Mat();
         let peri = cv.arcLength(cnt, true);
 
-        // 선들을 부드럽게 이어서 다각형으로 근사화 (오차범위 2%)
-        cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
+        // 오차 허용치 (기존 0.02에서 0.03으로 살짝 넓힘 - 아이보리 책상 대비)
+        cv.approxPolyDP(cnt, approx, 0.03 * peri, true);
 
-        // 꼭짓점이 4개이고, 지금까지 찾은 것 중 가장 크다면 '문서'로 인정
         if (approx.rows === 4 && area > maxArea) {
           maxArea = area;
           bestPoints = [];
@@ -158,7 +180,6 @@ function scanDocumentLoop() {
       }
     }
 
-    // [4단계] 문서를 찾았다면 4개의 꼭짓점 좌표 정렬
     if (bestPoints && bestPoints.length === 4) {
       bestPoints.sort((a, b) => a.x + a.y - (b.x + b.y));
       let tl = bestPoints[0];
@@ -169,8 +190,6 @@ function scanDocumentLoop() {
       let tr = bestPoints[3];
 
       foundDocThisFrame = true;
-
-      // 화면 스케일에 맞게 좌표 복원
       lastGoodCoords = {
         tl: { x: tl.x / scale, y: tl.y / scale },
         tr: { x: tr.x / scale, y: tr.y / scale },
@@ -179,30 +198,25 @@ function scanDocumentLoop() {
       };
     }
 
-    // ==========================================
-    // ★ 흔들림 방지(디바운싱) 및 자동 촬영 로직 ★
-    // ==========================================
     if (typeof window.missedCount === "undefined") window.missedCount = 0;
 
     if (foundDocThisFrame) {
-      stableCount++; // 성공 카운트 증가
-      window.missedCount = 0; // 실패 카운트 초기화
-      guideBox.classList.add("detected"); // 초록색 알림 켬
+      stableCount++;
+      window.missedCount = 0;
+      guideBox.classList.add("detected");
+      guideBox.classList.remove("scanning");
 
-      // 약 15프레임(0.4~0.5초) 동안 유지되면 자동 촬영 발동!
       if (stableCount >= 15) {
         isCapturing = true;
         executeHighResCapture(lastGoodCoords);
-        return; // 루프 완전 종료
+        return;
       }
     } else {
-      // 이번 프레임에서 문서를 놓쳤을 때
       window.missedCount++;
-
-      // 5프레임(약 0.15초) 연속으로 놓쳤을 때만 완전 초기화
       if (window.missedCount > 5) {
         stableCount = 0;
         guideBox.classList.remove("detected");
+        guideBox.classList.add("scanning"); // 다시 탐색 중 상태로
       }
     }
   } catch (err) {
@@ -216,14 +230,15 @@ function scanDocumentLoop() {
     hierarchy.delete();
   }
 
-  if (!isCapturing) detectReq = requestAnimationFrame(scanDocumentLoop);
+  if (!isCapturing && isScanningActive)
+    detectReq = requestAnimationFrame(scanDocumentLoop);
 }
 
 // ==========================================
-// 4. 고해상도 이미지 평탄화 (Perspective Transform)
+// 5. 고해상도 처리 및 평탄화 (자동/수동 공통)
 // ==========================================
 function executeHighResCapture(coords) {
-  guideBox.classList.remove("detected");
+  guideBox.className = "camera-guide-box";
 
   const vW = video.videoWidth;
   const vH = video.videoHeight;
@@ -235,7 +250,7 @@ function executeHighResCapture(coords) {
 
   let src = cv.imread(canvas);
   let dst = new cv.Mat();
-  let dsize = new cv.Size(1728, 2200); // 최종 해상도
+  let dsize = new cv.Size(1728, 2200);
 
   try {
     let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
@@ -259,7 +274,6 @@ function executeHighResCapture(coords) {
       dsize.height,
     ]);
 
-    // 투영 변환 (사다리꼴 -> 직사각형 펴기)
     let M = cv.getPerspectiveTransform(srcTri, dstTri);
     cv.warpPerspective(
       src,
@@ -271,8 +285,9 @@ function executeHighResCapture(coords) {
       new cv.Scalar()
     );
 
-    // 흑백 및 선명도(팩스) 처리
     cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
+
+    // ★ 사용자 튜닝 값 적용 (51, 7)
     cv.adaptiveThreshold(
       dst,
       dst,
@@ -280,13 +295,12 @@ function executeHighResCapture(coords) {
       cv.ADAPTIVE_THRESH_GAUSSIAN_C,
       cv.THRESH_BINARY,
       51,
-      5
+      7
     );
 
     cv.imshow(canvas, dst);
     scannedImage.src = canvas.toDataURL("image/jpeg", 0.9);
 
-    // 화면 전환
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
@@ -305,20 +319,15 @@ function executeHighResCapture(coords) {
   }
 }
 
-// ==========================================
-// 5. 수동 촬영 버튼 로직 (Fallback)
-// ==========================================
 function manualFallbackCapture() {
   if (isCapturing) return;
   isCapturing = true;
 
-  // 초록불이 들어왔을 때 성급하게 누르면, 잡혀있는 문서 좌표로 바로 촬영
   if (lastGoodCoords && guideBox.classList.contains("detected")) {
     executeHighResCapture(lastGoodCoords);
     return;
   }
 
-  // 아예 문서를 못 찾고 있는데 촬영 버튼을 누른 경우 -> 화면 중앙만 네모낳게 자르기
   const vW = video.videoWidth;
   const vH = video.videoHeight;
   canvas.width = vW;
@@ -384,6 +393,8 @@ function manualFallbackCapture() {
     );
 
     cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
+
+    // ★ 사용자 튜닝 값 적용 (51, 7)
     cv.adaptiveThreshold(
       dst,
       dst,
@@ -391,7 +402,7 @@ function manualFallbackCapture() {
       cv.ADAPTIVE_THRESH_GAUSSIAN_C,
       cv.THRESH_BINARY,
       51,
-      5
+      7
     );
 
     cv.imshow(canvas, dst);
@@ -452,9 +463,12 @@ function saveImage() {
   }
 }
 
-// 이벤트 리스너 연결
+// ==========================================
+// 7. 이벤트 리스너 연결
+// ==========================================
 if (startCaptureBtn) startCaptureBtn.addEventListener("click", startCamera);
 if (closeCameraBtn) closeCameraBtn.addEventListener("click", closeCamera);
-if (shutterBtn) shutterBtn.addEventListener("click", manualFallbackCapture);
+// ★ 촬영 버튼 이벤트를 onShutterBtnClick 으로 변경
+if (shutterBtn) shutterBtn.addEventListener("click", onShutterBtnClick);
 if (retakeBtn) retakeBtn.addEventListener("click", retakePhoto);
 if (saveBtn) saveBtn.addEventListener("click", saveImage);
