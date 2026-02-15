@@ -76,7 +76,7 @@ function closeCamera() {
 }
 
 // ==========================================
-// 3. 실시간 마커 탐색 루프 (초고속 저해상도 처리)
+// 3. 실시간 마커 탐색 루프 (QR코드 필터링 및 대기시간 증가)
 // ==========================================
 function scanMarkersLoop() {
   if (!stream || isCapturing) return;
@@ -89,8 +89,6 @@ function scanMarkersLoop() {
     return;
   }
 
-  // 🔧 [튜닝 1] 탐색 해상도 상향 (640 -> 800)
-  // 화면을 너무 많이 줄이면 작은 마커가 뭉개지므로 해상도를 조금 높였습니다.
   const scale = 800 / Math.max(vW, vH);
   const dW = Math.floor(vW * scale);
   const dH = Math.floor(vH * scale);
@@ -113,23 +111,18 @@ function scanMarkersLoop() {
 
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-
-    // 🔧 [튜닝 2] 가벼운 블러 처리 추가 (빛 반사 및 노이즈 제거용)
     cv.GaussianBlur(gray, gray, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
 
-    // 이진화 처리
+    // 블록 사이즈를 살짝 줄여서 내부 틈새(QR코드)를 더 확실히 분리
     cv.adaptiveThreshold(
       gray,
       thresh,
       255,
       cv.ADAPTIVE_THRESH_MEAN_C,
       cv.THRESH_BINARY_INV,
-      51,
+      31,
       10
     );
-
-    // 🔧 [튜닝 3] 탐색 모드 변경 (RETR_EXTERNAL -> RETR_LIST)
-    // 용지 외곽선 안쪽에 마커가 있다고 판단해 무시하는 현상 방지
     cv.findContours(
       thresh,
       contours,
@@ -140,10 +133,10 @@ function scanMarkersLoop() {
 
     let candidates = [];
 
-    // 🔧 [튜닝 4] 마커 최소 크기 조건 대폭 완화 (0.0005 -> 0.0001)
-    // 점이 화면에서 차지하는 비율이 아주 작아도 후보에 넣습니다.
-    const minArea = dW * dH * 0.0001;
-    const maxArea = dW * dH * 0.05;
+    // 🔧 [핵심 수정 1] 최대 크기(maxArea) 대폭 감소
+    // QR코드는 마커보다 훨씬 크므로, 화면의 0.8% 이상을 차지하는 거대한 덩어리(QR코드)는 아예 검사 대상에서 제외합니다.
+    const minArea = dW * dH * 0.0001; // 최소 크기 (유지)
+    const maxArea = dW * dH * 0.008; // 기존 0.05에서 0.008로 대폭 줄임!
 
     for (let i = 0; i < contours.size(); ++i) {
       let cnt = contours.get(i);
@@ -154,10 +147,10 @@ function scanMarkersLoop() {
         let aspect = rect.width / rect.height;
         let extent = area / (rect.width * rect.height);
 
-        // 🔧 [튜닝 5] 형태 허용치 완화
-        // 가로세로 비율(0.5~2.0)을 늘려 살짝 찌그러져도 통과시키고,
-        // 속이 꽉 찬 정도(extent)를 0.5 -> 0.4로 낮춰서 빛 반사로 점 안이 살짝 하얗게 비어도 통과시킵니다.
-        if (aspect >= 0.5 && aspect <= 2.0 && extent >= 0.4) {
+        // 🔧 [핵심 수정 2] 밀도(extent) 검사 강화
+        // QR코드는 내부에 틈이 많아 extent 값이 낮게 나옵니다.
+        // 0.65 이상(속이 까맣게 꽉 찬 사각형)만 통과시킵니다.
+        if (aspect >= 0.5 && aspect <= 2.0 && extent >= 0.65) {
           candidates.push({
             x: rect.x + rect.width / 2,
             y: rect.y + rect.height / 2,
@@ -175,7 +168,6 @@ function scanMarkersLoop() {
       let bl = candidates[0];
       let tr = candidates[candidates.length - 1];
 
-      // 가장 바깥쪽의 점 4개가 이루는 가로 길이가 전체 화면의 30% 이상일 때만 용지로 인식 (노이즈 방지)
       if (tr.x - tl.x > dW * 0.3) {
         stableCount++;
         guideBox.classList.add("detected");
@@ -187,7 +179,9 @@ function scanMarkersLoop() {
           bl: { x: bl.x / scale, y: bl.y / scale },
         };
 
-        if (stableCount > 10) {
+        // 🔧 [핵심 수정 3] 대기 시간 증가
+        // stableCount 요구치를 10에서 20으로 늘렸습니다. (기기 성능에 따라 다르지만 약 0.5초 ~ 0.7초 정도 소요됨)
+        if (stableCount > 20) {
           isCapturing = true;
           executeHighResCapture(lastGoodCoords);
           return;
