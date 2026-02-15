@@ -84,14 +84,14 @@ function scanMarkersLoop() {
   const vW = video.videoWidth;
   const vH = video.videoHeight;
 
-  // 카메라가 아직 준비 안 됐으면 다음 프레임 대기
   if (vW === 0) {
     detectReq = requestAnimationFrame(scanMarkersLoop);
     return;
   }
 
-  // 연산 속도를 위해 가로 640px 수준으로 줄여서 탐색
-  const scale = 640 / Math.max(vW, vH);
+  // 🔧 [튜닝 1] 탐색 해상도 상향 (640 -> 800)
+  // 화면을 너무 많이 줄이면 작은 마커가 뭉개지므로 해상도를 조금 높였습니다.
+  const scale = 800 / Math.max(vW, vH);
   const dW = Math.floor(vW * scale);
   const dH = Math.floor(vH * scale);
 
@@ -114,7 +114,10 @@ function scanMarkersLoop() {
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
 
-    // 블록 사이즈를 크게(51) 줘서 마커 속이 뻥 뚫리는 현상 방지
+    // 🔧 [튜닝 2] 가벼운 블러 처리 추가 (빛 반사 및 노이즈 제거용)
+    cv.GaussianBlur(gray, gray, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
+
+    // 이진화 처리
     cv.adaptiveThreshold(
       gray,
       thresh,
@@ -124,29 +127,37 @@ function scanMarkersLoop() {
       51,
       10
     );
+
+    // 🔧 [튜닝 3] 탐색 모드 변경 (RETR_EXTERNAL -> RETR_LIST)
+    // 용지 외곽선 안쪽에 마커가 있다고 판단해 무시하는 현상 방지
     cv.findContours(
       thresh,
       contours,
       hierarchy,
-      cv.RETR_EXTERNAL,
+      cv.RETR_LIST,
       cv.CHAIN_APPROX_SIMPLE
     );
 
     let candidates = [];
-    const minArea = dW * dH * 0.0005; // 최소 크기 제한 완화
 
-    // 검은색 덩어리들 중 정사각형 마커만 추려내기
+    // 🔧 [튜닝 4] 마커 최소 크기 조건 대폭 완화 (0.0005 -> 0.0001)
+    // 점이 화면에서 차지하는 비율이 아주 작아도 후보에 넣습니다.
+    const minArea = dW * dH * 0.0001;
+    const maxArea = dW * dH * 0.05;
+
     for (let i = 0; i < contours.size(); ++i) {
       let cnt = contours.get(i);
       let area = cv.contourArea(cnt);
 
-      if (area > minArea) {
+      if (area > minArea && area < maxArea) {
         let rect = cv.boundingRect(cnt);
         let aspect = rect.width / rect.height;
         let extent = area / (rect.width * rect.height);
 
-        // 가로세로 비율이 1에 가깝고 속이 꽉 찬 사각형
-        if (aspect >= 0.6 && aspect <= 1.6 && extent >= 0.5) {
+        // 🔧 [튜닝 5] 형태 허용치 완화
+        // 가로세로 비율(0.5~2.0)을 늘려 살짝 찌그러져도 통과시키고,
+        // 속이 꽉 찬 정도(extent)를 0.5 -> 0.4로 낮춰서 빛 반사로 점 안이 살짝 하얗게 비어도 통과시킵니다.
+        if (aspect >= 0.5 && aspect <= 2.0 && extent >= 0.4) {
           candidates.push({
             x: rect.x + rect.width / 2,
             y: rect.y + rect.height / 2,
@@ -155,7 +166,6 @@ function scanMarkersLoop() {
       }
     }
 
-    // 4개 이상 찾았을 경우 가장 바깥쪽 모서리 4개 도출
     if (candidates.length >= 4) {
       candidates.sort((a, b) => a.x + a.y - (b.x + b.y));
       let tl = candidates[0];
@@ -165,12 +175,11 @@ function scanMarkersLoop() {
       let bl = candidates[0];
       let tr = candidates[candidates.length - 1];
 
-      // 4개의 점이 화면에서 어느정도 큰 면적을 차지할 때만 인정 (노이즈 방지)
+      // 가장 바깥쪽의 점 4개가 이루는 가로 길이가 전체 화면의 30% 이상일 때만 용지로 인식 (노이즈 방지)
       if (tr.x - tl.x > dW * 0.3) {
         stableCount++;
-        guideBox.classList.add("detected"); // 초록색 UI 표시
+        guideBox.classList.add("detected");
 
-        // 찾은 좌표를 원본 고해상도 스케일로 변환하여 저장
         lastGoodCoords = {
           tl: { x: tl.x / scale, y: tl.y / scale },
           tr: { x: tr.x / scale, y: tr.y / scale },
@@ -178,11 +187,10 @@ function scanMarkersLoop() {
           bl: { x: bl.x / scale, y: bl.y / scale },
         };
 
-        // 약 0.3초간 흔들림 없이 유지되면 자동 촬영 발동!
         if (stableCount > 10) {
           isCapturing = true;
           executeHighResCapture(lastGoodCoords);
-          return; // 루프 종료
+          return;
         }
       } else {
         resetDetection();
