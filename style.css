@@ -191,19 +191,47 @@ body {
   object-fit: cover; /* 화면을 꽉 채움 */
 }
 
-/* 가이드라인 박스 (화면 중앙 네모) */
+/* =========================================
+   카메라 가이드 박스 (자동 인식 UI 적용)
+   ========================================= */
 .camera-guide-box {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%); /* 정확히 중앙 정렬 */
-  width: 80%; /* 화면 너비의 80% */
-  aspect-ratio: 1 / 1.414; /* A4 용지 비율 (약 1:1.4) */
-
-  border: 2px solid rgba(255, 255, 255, 0.8); /* 흰색 테두리 */
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); /* 박스 바깥을 어둡게 처리 (집중 효과) */
+  transform: translate(-50%, -50%);
+  width: 80%;
+  aspect-ratio: 1 / 1.414;
+  border: 2px dashed rgba(255, 255, 255, 0.6); /* 기본은 흰색 점선 */
   border-radius: 12px;
-  pointer-events: none; /* 터치 통과 */
+  pointer-events: none;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 탐색 중 텍스트 */
+.camera-guide-box::before {
+  content: "마커(■) 탐색 중...";
+  color: white;
+  font-size: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8px 16px;
+  border-radius: 20px;
+}
+
+/* ★ 마커를 찾았을 때 (JS에서 클래스 추가됨) ★ */
+.camera-guide-box.detected {
+  border: 4px solid #00ff00; /* 초록색 실선 */
+  background-color: rgba(0, 255, 0, 0.1); /* 초록색 틴트 */
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.5), 0 0 0 9999px rgba(0, 0, 0, 0.6);
+}
+
+.camera-guide-box.detected::before {
+  content: "가만히 계세요! (자동 촬영)";
+  color: #00ff00;
+  font-weight: bold;
+  background: rgba(0, 0, 0, 0.8);
 }
 
 /* 박스 모서리 강조 (선택사항 - 더 스캐너 같음) */
