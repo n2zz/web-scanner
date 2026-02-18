@@ -145,7 +145,7 @@ function scanDocumentLoop() {
     cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
 
     // ★ 사용자 튜닝 값 적용 (10, 40)
-    cv.Canny(blurred, edges, 5, 20);
+    cv.Canny(blurred, edges, 10, 40);
 
     // ★ [추가할 코드] 찾아낸 선을 강제로 두껍게 번지게 만들어서 끊어진 점선 이어붙이기
     let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
