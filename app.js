@@ -252,11 +252,10 @@ function scanDocumentLoop() {
     detectReq = requestAnimationFrame(scanDocumentLoop);
 }
 
-// ==========================================
-// 5. 고해상도 처리 및 평탄화 (자동/수동 공통)
+// 5. 고해상도 처리: 테두리 기반 마커 탐색 및 평탄화 (Hybrid)
 // ==========================================
 function executeHighResCapture(coords) {
-  guideBox.className = "camera-guide-box";
+  guideBox.className = "camera-guide-box"; // UI 초기화
 
   const vW = video.videoWidth;
   const vH = video.videoHeight;
@@ -267,33 +266,106 @@ function executeHighResCapture(coords) {
   ctx.drawImage(video, 0, 0, vW, vH);
 
   let src = cv.imread(canvas);
+  let gray = new cv.Mat();
+  let thresh = new cv.Mat();
+  let contours = new cv.MatVector();
+  let hierarchy = new cv.Mat();
+
   let dst = new cv.Mat();
   let dsize = new cv.Size(1728, 2200);
 
   try {
-    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      coords.tl.x,
-      coords.tl.y,
-      coords.tr.x,
-      coords.tr.y,
-      coords.br.x,
-      coords.br.y,
-      coords.bl.x,
-      coords.bl.y,
-    ]);
-    // 안쪽으로 파고들 픽셀(px) 여백 설정 (숫자를 자유롭게 조절하세요!)
-    let marginX = 5; // 좌우 테두리를 각각 20px씩 잘라냄
-    let marginY = 10; // 상하 테두리를 각각 25px씩 잘라냄
+    // [1단계] 고해상도 원본에서 흑백 이진화로 까만 마커 덩어리들 찾기
+    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+    cv.adaptiveThreshold(
+      gray,
+      thresh,
+      255,
+      cv.ADAPTIVE_THRESH_MEAN_C,
+      cv.THRESH_BINARY_INV,
+      51,
+      15
+    );
+    cv.findContours(
+      thresh,
+      contours,
+      hierarchy,
+      cv.RETR_LIST,
+      cv.CHAIN_APPROX_SIMPLE
+    );
 
+    let candidates = [];
+    const minArea = vW * vH * 0.00005; // 고해상도 기준 최소 크기
+    const maxArea = vW * vH * 0.01;
+
+    for (let i = 0; i < contours.size(); ++i) {
+      let cnt = contours.get(i);
+      let area = cv.contourArea(cnt);
+
+      if (area > minArea && area < maxArea) {
+        let rect = cv.boundingRect(cnt);
+        let aspect = rect.width / rect.height;
+        let extent = area / (rect.width * rect.height);
+
+        // 정사각형에 가깝고 꽉 찬 도형만 후보에 올림
+        if (aspect >= 0.5 && aspect <= 2.0 && extent >= 0.5) {
+          candidates.push({
+            x: rect.x + rect.width / 2,
+            y: rect.y + rect.height / 2,
+          });
+        }
+      }
+    }
+
+    // [2단계] 미리 찾았던 '종이 테두리 4점(coords)'과 가장 가까운 마커 4개 짝짓기
+    if (candidates.length < 4) {
+      throw new Error("마커개수부족");
+    }
+
+    const getDist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    let corners = [coords.tl, coords.tr, coords.br, coords.bl];
+    let matchedMarkers = [];
+
+    for (let corner of corners) {
+      // 현재 꼭짓점과 가장 가까운 마커 찾기
+      candidates.sort((a, b) => getDist(corner, a) - getDist(corner, b));
+      let closest = candidates.shift(); // 찾은 건 목록에서 빼기
+
+      // 만약 가장 가까운 마커가 꼭짓점에서 너무 멀면(예: 전체 화면 너비의 15% 밖) 엉뚱한 노이즈로 간주
+      if (getDist(corner, closest) > vW * 0.15) {
+        throw new Error("마커위치불량");
+      }
+      matchedMarkers.push(closest);
+    }
+
+    // [3단계] 찾은 4개의 마커를 기준으로 완벽한 시점 변환
+    let mTL = matchedMarkers[0];
+    let mTR = matchedMarkers[1];
+    let mBR = matchedMarkers[2];
+    let mBL = matchedMarkers[3];
+
+    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+      mTL.x,
+      mTL.y,
+      mTR.x,
+      mTR.y,
+      mBR.x,
+      mBR.y,
+      mBL.x,
+      mBL.y,
+    ]);
+
+    // 💡 튜닝 팁: 마커가 도화지 모서리에 딱 맞게 변환됩니다.
+    // 만약 마커 바깥쪽의 하얀 여백도 스캔본에 남기고 싶다면 0 대신 숫자(예: 30)를 넣고, 넓이를 줄이세요.
     let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      -marginX,
-      -marginY,
-      dsize.width + marginX,
-      -marginY,
-      dsize.width + marginX,
-      dsize.height + marginY,
-      -marginX,
-      dsize.height + marginY,
+      0,
+      0,
+      dsize.width,
+      0,
+      dsize.width,
+      dsize.height,
+      0,
+      dsize.height,
     ]);
 
     let M = cv.getPerspectiveTransform(srcTri, dstTri);
@@ -307,9 +379,8 @@ function executeHighResCapture(coords) {
       new cv.Scalar()
     );
 
+    // [4단계] 팩스 효과 처리 (이전에 튜닝하신 51, 7 적용)
     cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
-
-    // ★ 사용자 튜닝 값 적용 (51, 7)
     cv.adaptiveThreshold(
       dst,
       dst,
@@ -323,6 +394,7 @@ function executeHighResCapture(coords) {
     cv.imshow(canvas, dst);
     scannedImage.src = canvas.toDataURL("image/jpeg", 0.9);
 
+    // 정상 처리 후 화면 전환
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
@@ -334,116 +406,25 @@ function executeHighResCapture(coords) {
     dstTri.delete();
     M.delete();
   } catch (err) {
-    alert("이미지 처리 중 오류가 발생했습니다.");
-  } finally {
-    src.delete();
-    dst.delete();
-  }
-}
+    console.error("고해상도 처리 에러:", err.message);
 
-function manualFallbackCapture() {
-  if (isCapturing) return;
-  isCapturing = true;
-
-  if (lastGoodCoords && guideBox.classList.contains("detected")) {
-    executeHighResCapture(lastGoodCoords);
-    return;
-  }
-
-  const vW = video.videoWidth;
-  const vH = video.videoHeight;
-  canvas.width = vW;
-  canvas.height = vH;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0, vW, vH);
-
-  const videoRatio = vW / vH;
-  const screenRatio = video.clientWidth / video.clientHeight;
-  const guideRect = guideBox.getBoundingClientRect();
-  const videoRect = video.getBoundingClientRect();
-
-  let scale,
-    offsetX = 0,
-    offsetY = 0;
-  if (screenRatio > videoRatio) {
-    scale = vW / video.clientWidth;
-    offsetY = (vH - video.clientHeight * scale) / 2;
-  } else {
-    scale = vH / video.clientHeight;
-    offsetX = (vW - video.clientWidth * scale) / 2;
-  }
-
-  let rx = (guideRect.left - videoRect.left) * scale + offsetX;
-  let ry = (guideRect.top - videoRect.top) * scale + offsetY;
-  let rw = guideRect.width * scale;
-  let rh = guideRect.height * scale;
-
-  let src = cv.imread(canvas);
-  let dst = new cv.Mat();
-  let dsize = new cv.Size(1728, 2200);
-
-  try {
-    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      rx,
-      ry,
-      rx + rw,
-      ry,
-      rx + rw,
-      ry + rh,
-      rx,
-      ry + rh,
-    ]);
-    let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0,
-      0,
-      dsize.width,
-      0,
-      dsize.width,
-      dsize.height,
-      0,
-      dsize.height,
-    ]);
-    let M = cv.getPerspectiveTransform(srcTri, dstTri);
-    cv.warpPerspective(
-      src,
-      dst,
-      M,
-      dsize,
-      cv.INTER_LINEAR,
-      cv.BORDER_CONSTANT,
-      new cv.Scalar()
+    // ★ 마커를 찾지 못했을 때 얼럿 띄우고 다시 대기 상태로 복귀
+    alert(
+      "마커(■)가 가려졌거나 위치가 부정확합니다. 다시 촬영 버튼을 눌러주세요."
     );
 
-    cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0);
+    isCapturing = false;
+    isScanningActive = false;
+    guideBox.className = "camera-guide-box"; // UI 초기화
 
-    // ★ 사용자 튜닝 값 적용 (51, 7)
-    cv.adaptiveThreshold(
-      dst,
-      dst,
-      255,
-      cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-      cv.THRESH_BINARY,
-      51,
-      7
-    );
-
-    cv.imshow(canvas, dst);
-    scannedImage.src = canvas.toDataURL("image/jpeg", 0.9);
-
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      stream = null;
-    }
-    cameraPage.style.display = "none";
-    resultPage.style.display = "flex";
-
-    srcTri.delete();
-    dstTri.delete();
-    M.delete();
-  } catch (e) {
-    alert("캡처에 실패했습니다.");
+    // 셔터 버튼을 다시 보여줘서 재촬영 유도
+    if (shutterBtn) shutterBtn.style.display = "block";
   } finally {
     src.delete();
+    gray.delete();
+    thresh.delete();
+    contours.delete();
+    hierarchy.delete();
     dst.delete();
   }
 }
