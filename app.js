@@ -281,15 +281,19 @@ function executeHighResCapture(coords) {
       coords.bl.x,
       coords.bl.y,
     ]);
+    // 안쪽으로 파고들 픽셀(px) 여백 설정 (숫자를 자유롭게 조절하세요!)
+    let marginX = 20; // 좌우 테두리를 각각 20px씩 잘라냄
+    let marginY = 25; // 상하 테두리를 각각 25px씩 잘라냄
+
     let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0,
-      0,
-      dsize.width,
-      0,
-      dsize.width,
-      dsize.height,
-      0,
-      dsize.height,
+      -marginX,
+      -marginY,
+      dsize.width + marginX,
+      -marginY,
+      dsize.width + marginX,
+      dsize.height + marginY,
+      -marginX,
+      dsize.height + marginY,
     ]);
 
     let M = cv.getPerspectiveTransform(srcTri, dstTri);
