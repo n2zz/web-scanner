@@ -139,7 +139,7 @@ function scanDocumentLoop() {
 
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+    cv.GaussianBlur(gray, blurred, new cv.Size(2, 2), 0, 0, cv.BORDER_DEFAULT);
 
     // ★ 사용자 튜닝 값 적용 (10, 40)
     cv.Canny(blurred, edges, 10, 40);
@@ -206,7 +206,8 @@ function scanDocumentLoop() {
       guideBox.classList.add("detected");
       guideBox.classList.remove("scanning");
 
-      if (stableCount >= 15) {
+      if (stableCount >= 40) {
+        // 대기시간
         isCapturing = true;
         executeHighResCapture(lastGoodCoords);
         return;
