@@ -57,6 +57,9 @@ async function startCamera() {
     stableCount = 0;
     guideBox.className = "camera-guide-box"; // 모든 CSS 클래스 초기화
 
+    // ★ (추가) 카메라 켤 때 촬영 버튼 다시 보이게 만들기
+    shutterBtn.style.display = "block";
+
     // ★ 여기서 바로 탐색을 시작하지 않고 화면만 띄워둡니다.
   } catch (err) {
     alert("카메라 권한을 허용해주세요.");
@@ -86,17 +89,17 @@ function onShutterBtnClick() {
   if (isCapturing) return;
 
   if (!isScanningActive) {
-    // [1] 대기 상태에서 처음 눌렀을 때 -> 자동 탐색 시작
+    // 대기 상태에서 처음 눌렀을 때 -> 자동 탐색 시작
     isScanningActive = true;
     stableCount = 0;
     window.missedCount = 0;
 
     guideBox.classList.add("scanning"); // '탐색 중...' UI로 변경
+
+    // ★ 버튼 숨기기 (직접 촬영 완전 차단)
+    shutterBtn.style.display = "none";
+
     detectReq = requestAnimationFrame(scanDocumentLoop); // 엔진 가동!
-  } else {
-    // [2] 이미 탐색 중인데 답답해서 한 번 더 눌렀을 때 -> 강제 수동 캡처
-    if (detectReq) cancelAnimationFrame(detectReq);
-    manualFallbackCapture();
   }
 }
 
@@ -139,10 +142,24 @@ function scanDocumentLoop() {
 
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-    cv.GaussianBlur(gray, blurred, new cv.Size(2, 2), 0, 0, cv.BORDER_DEFAULT);
+    cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
 
     // ★ 사용자 튜닝 값 적용 (10, 40)
-    cv.Canny(blurred, edges, 10, 40);
+    cv.Canny(blurred, edges, 5, 20);
+
+    // ★ [추가할 코드] 찾아낸 선을 강제로 두껍게 번지게 만들어서 끊어진 점선 이어붙이기
+    let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+    cv.dilate(
+      edges,
+      edges,
+      kernel,
+      new cv.Point(-1, -1),
+      1,
+      cv.BORDER_CONSTANT,
+      cv.morphologyDefaultBorderValue()
+    );
+    kernel.delete();
+    // -------------------------------------------------------------------------
 
     cv.findContours(
       edges,
