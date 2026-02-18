@@ -355,17 +355,20 @@ function executeHighResCapture(coords) {
       mBL.y,
     ]);
 
-    // 💡 튜닝 팁: 마커가 도화지 모서리에 딱 맞게 변환됩니다.
-    // 만약 마커 바깥쪽의 하얀 여백도 스캔본에 남기고 싶다면 0 대신 숫자(예: 30)를 넣고, 넓이를 줄이세요.
+    // ★ 요청하신 X(좌우), Top(상단), Bottom(하단) 여백 적용
+    let marginX = 80; // 좌우 마커 바깥쪽 여백
+    let marginTop = 50; // 상단 마커 바깥쪽 여백
+    let marginBottom = 160; // 하단 마커 바깥쪽 여백
+
     let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-      0,
-      0,
-      dsize.width,
-      0,
-      dsize.width,
-      dsize.height,
-      0,
-      dsize.height,
+      marginX,
+      marginTop, // 1. 좌상단 마커 위치 (x, y)
+      dsize.width - marginX,
+      marginTop, // 2. 우상단 마커 위치
+      dsize.width - marginX,
+      dsize.height - marginBottom, // 3. 우하단 마커 위치
+      marginX,
+      dsize.height - marginBottom, // 4. 좌하단 마커 위치
     ]);
 
     let M = cv.getPerspectiveTransform(srcTri, dstTri);
