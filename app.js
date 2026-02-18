@@ -282,8 +282,8 @@ function executeHighResCapture(coords) {
       coords.bl.y,
     ]);
     // 안쪽으로 파고들 픽셀(px) 여백 설정 (숫자를 자유롭게 조절하세요!)
-    let marginX = 10; // 좌우 테두리를 각각 20px씩 잘라냄
-    let marginY = 15; // 상하 테두리를 각각 25px씩 잘라냄
+    let marginX = 5; // 좌우 테두리를 각각 20px씩 잘라냄
+    let marginY = 10; // 상하 테두리를 각각 25px씩 잘라냄
 
     let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
       -marginX,
