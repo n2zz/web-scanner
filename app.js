@@ -357,7 +357,7 @@ function executeHighResCapture(coords) {
 
     // ★ 요청하신 X(좌우), Top(상단), Bottom(하단) 여백 적용
     let marginX = 90; // 좌우 마커 바깥쪽 여백
-    let marginTop = 80; // 상단 마커 바깥쪽 여백
+    let marginTop = 75; // 상단 마커 바깥쪽 여백
     let marginBottom = 180; // 하단 마커 바깥쪽 여백
 
     let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
